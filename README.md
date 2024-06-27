@@ -11,9 +11,7 @@ This repo contains R scripts to make MPRA oligos from GWAS variants. It assumes 
 The `grab_proxies.R` script is meant to be run from the command line wrapped with `sbatch` or in a job submission script. For example:
 
 ```
-{
 sbatch --account=[acct] --ntasks=1 --mem-per-cpu=4GB --time=00:10:00 --wrap "Rscript /path/to/grab_proxies.R -intab /path/to/signal_list.txt -token [ldlink_token] -outdir /path/to/snp_outdir"
-}
 ```
 
 Adjust parameters and paths as needed.
@@ -23,9 +21,7 @@ Adjust parameters and paths as needed.
 Similar to the `grab_proxies.R` script, `grab_info.R` should be run from the command line. For example:
 
 ```
-{
 sbatch --account=[acct] --ntasks=1 --mem-per-cpu=4GB --time=00:10:00 --wrap "Rscript /path/to/grab_info.R -indir /path/to/snp_outdir -token [ncbi_token] -outdir /path/to/snp_info_outdir -r2cutoff 0.7"
-}
 ```
 
 ## Design oligos
