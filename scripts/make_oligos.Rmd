@@ -1,0 +1,259 @@
+---
+title: "Make oligos"
+output: html_notebook
+---
+
+```{r}
+librarian::shelf(tidyverse, BSgenome.Hsapiens.UCSC.hg38, stringi, seqinr)
+```
+
+Set up restriction enzyme detection/correction functions. Adjust to accommodate your enzymes. You may also want to adjust the parse_cutdetect function to change the boundaries where cut sites are allowed in relation to variants of interest (may be useful for larger indels).
+
+```{r}
+# detecting/correcting in order of use during cloning: PaqCI_fwd, PaqCI_rev, SfiI, BsaI_fwd, "BsaI_rev", AsiSI, EcoRI, SbfI
+cut_detect <- function(df, ref_seq_col) {
+  cut_list <- list()
+  cut_list[[1]] <- stri_locate_all(df[[{{ref_seq_col}}]], regex = "CACCTGC")
+  cut_list[[2]] <- stri_locate_all(df[[{{ref_seq_col}}]], regex = "GCAGGTG")
+  cut_list[[3]] <- stri_locate_all(df[[{{ref_seq_col}}]], regex = "GGCC[ACTG]{5}GGCC")
+  cut_list[[4]] <- stri_locate_all(df[[{{ref_seq_col}}]], regex = "GGTCTC")
+  cut_list[[5]] <- stri_locate_all(df[[{{ref_seq_col}}]], regex = "GAGACC")
+  cut_list[[6]] <- stri_locate_all(df[[{{ref_seq_col}}]], regex = "GCGATCGC")
+  cut_list[[7]] <- stri_locate_all(df[[{{ref_seq_col}}]], regex = "GAATTC")
+  cut_list[[8]] <- stri_locate_all(df[[{{ref_seq_col}}]], regex = "CCTGCAGG")
+  for (i in 1:8) {names(cut_list[[i]]) <- df$rsid}
+  return(cut_list)
+  }
+
+reduce_cutdetect <- function(df, name) {
+    if (all(is.na(df))) {
+      data.frame(matrix(c(NA, NA), ncol = 2)) %>%
+        mutate(rsid = name) %>% rename(start = X1, end = X2)
+    } else {
+      as.data.frame(df) %>%
+        mutate(rsid = name)
+    }
+}
+
+parse_cutdetect <- function(df) {
+    mapply(reduce_cutdetect, df, names(df), SIMPLIFY = FALSE) %>%
+    bind_rows() %>%
+    select(rsid, start, end) %>%
+    mutate(detect = case_when(is.na(start) & is.na(end) ~ FALSE,
+                              TRUE ~ TRUE),
+           correct = case_when(end < 75 | start > 125 ~ TRUE,
+                               TRUE ~ FALSE)) %>%
+    group_by(rsid) %>%
+    summarize(rsid = rsid,
+              detect = detect,
+              correct = !(any(correct == FALSE))) %>%
+    distinct(rsid, .keep_all = TRUE)
+}
+
+return_detect <- function(df, ref_seq_col) {
+  cutdetect_out <- cut_detect(df, {{ref_seq_col}})
+  detect_list <- list()
+for (i in 1:8) {
+  detect_list[[i]] <- parse_cutdetect(cutdetect_out[[i]])
+}
+  names(detect_list) <- c("paq_fwd", "paq_rev", "sfi", "bsa_fwd", "bsa_rev",
+                          "asi", "eco", "sbf")
+  return(detect_list)
+}
+
+cut_correct <- function(df, ref_seq_col) {
+  detect_out <- return_detect(df, {{ref_seq_col}})
+  for (i in 1:8){
+    colnames(detect_out[[i]])[2:3] <- paste(names(detect_out)[[i]], colnames(detect_out[[i]])[2:3], sep = "_")
+  }
+  detect_full <- purrr::reduce(detect_out, full_join, by = "rsid")
+  full_join(df, detect_full, by = "rsid") %>%
+    mutate(paq_fwd_corrected = case_when(
+             paq_fwd_detect == TRUE ~ str_replace(!!sym((ref_seq_col)), "CACCTGC", "CACCTcC"),
+             TRUE ~ !!sym((ref_seq_col))
+           ),
+           paq_rev_corrected = case_when(
+             paq_rev_detect == TRUE ~ str_replace(paq_fwd_corrected, "GTGGACG", "GTGGAgG"),
+             TRUE ~ paq_fwd_corrected
+           ),
+           sfi_corrected = case_when(
+             sfi_detect == TRUE ~ str_replace(paq_rev_corrected, "GGCC([ACTG]{6})(GGCC)", "GGgC\\1\\2"),
+             TRUE ~ paq_rev_corrected
+           ),
+           bsa_fwd_corrected = case_when(
+             bsa_fwd_detect == TRUE ~ str_replace(sfi_corrected, "CCAGAG([ACTG]{5})", "CCAcAG\\1"),
+             TRUE ~ sfi_corrected
+           ),
+           bsa_rev_corrected = case_when(
+             bsa_rev_detect == TRUE ~ str_replace(bsa_fwd_corrected, "GGTCTC([ACTG]{5})", "GGTgTC\\1"),
+             TRUE ~ bsa_fwd_corrected
+           ),
+           asi_corrected = case_when(
+             asi_detect == TRUE ~ str_replace(bsa_rev_corrected, "GCGATCGC", "GgGATCGC"),
+             TRUE ~ bsa_rev_corrected
+           ),
+           eco_corrected = case_when(
+             eco_detect == TRUE ~ str_replace(asi_corrected, "GAATTC", "GgATTC"),
+             TRUE ~ asi_corrected
+           ),
+           sbf_corrected = case_when(
+             sbf_detect == TRUE ~ str_replace(eco_corrected, "CCTGCAGG", "CCaGCAGG"),
+             TRUE ~ eco_corrected
+           )
+    ) %>%
+    rename(corrected_seq = sbf_corrected) %>%
+    select(-c(paq_fwd_corrected, paq_rev_corrected, sfi_corrected, bsa_fwd_corrected, bsa_rev_corrected, asi_corrected, eco_corrected))
+}
+
+```
+
+Make final edits to proxy list formatting.
+
+```{r}
+proxies_final <- read.delim("/path/to/final_proxies_tab.tsv")
+
+proxies_final <- proxies_final %>%
+  mutate(chr = case_when(substr(chr,1,3)=="chr" ~ chr,
+                         TRUE ~ paste0("chr",chr)),
+  		chr = case_when(chr == "chr23" ~ "chrX",
+                         TRUE ~ chr))
+```
+
+Separate proxies into SNVs and indels to process separately.
+
+```{r}
+# single nucleotide variants should be 1 character in length
+proxies_snv <- proxies_final %>%
+  filter(nchar(ref_allele) == 1 & nchar(alt_allele) == 1 & ref_allele != "-" & alt_allele != "-")
+
+# indels should have one or both alleles with >1 character
+proxies_indel <- proxies_final %>%
+  filter(nchar(ref_allele) != 1 | nchar(alt_allele) != 1 | ref_allele == "-" | alt_allele == "-")
+```
+
+Make 200-bp SNV oligos. Change lines 141-142 to make different length oligos. Also performs restriction enzyme cut site correction if recognition site is >+/- 25 bp from centered allele.
+
+```{r}
+# set oligo coordinates
+proxies_snv$start_oligo <- as.numeric(proxies_snv$bp)-100
+proxies_snv$end_oligo <- as.numeric(proxies_snv$bp)+99
+
+# get reference seq
+proxies_snv$ref_seq <- as.character(Biostrings::getSeq(BSgenome.Hsapiens.UCSC.hg38,
+                                                       proxies_snv$chr,
+                                                       proxies_snv$start_oligo,
+                                                       proxies_snv$end_oligo))
+
+# perform restriction enzyme cut site correction
+proxies_snv_corrected <- cut_correct(proxies_snv, "ref_seq")
+
+# set alt seq to ref seq, then change allele at base 101
+proxies_snv_corrected$alt_seq <- proxies_snv_corrected$corrected_seq
+str_sub(proxies_snv_corrected$alt_seq, 101, 101) <- proxies_snv_corrected$alt_allele
+proxies_snv_corrected <- proxies_snv_corrected %>%
+  mutate(base_name = paste(rsid, chr, bp, ref_allele, alt_allele, sep = "_"),
+         ref_name = paste(base_name, "R", sep = "_"),
+         alt_name = paste(base_name, "A", sep = "_"))
+
+# check that the ref and alt allele labels from NCBI are consistent with UCSC sequences
+proxies_snv_corrected <- proxies_snv_corrected %>%
+  mutate(pull_allele = toupper(str_sub(corrected_seq, 101, 101)),
+         allele_check = case_when(pull_allele == ref_allele ~ TRUE,
+                                  TRUE ~ FALSE))
+table(proxies_snv_corrected$allele_check) # hopefully all TRUE - if not, inspect manually
+```
+
+OPTIONAL: make indel oligos. This assumes you want to make oligos with consistent flanking sequences between ref and alt alleles -- with indel alleles, this results in oligos < or > 200 bp in length. As with the SNVs, makes 200-bp oligos.
+
+```{r}
+proxies_indel <- proxies_indel %>%
+  mutate(ref_allele_name = ref_allele,
+         alt_allele_name = alt_allele,
+         ref_allele = case_when(ref_allele == "-" ~ "",
+                                TRUE ~ ref_allele),
+         alt_allele = case_when(alt_allele == "-" ~ "",
+                                TRUE ~ alt_allele),
+         ref_length = nchar(ref_allele),
+         bp_start = bp,
+         bp_end = bp-1,
+         bp_end = case_when(ref_length > 1 ~ bp_end + ref_length,
+                            ref_length == 1 | ref_length == 0 ~ bp_end + 1),
+         bp_add_start = case_when(ref_length > 2 ~ 100-floor(ref_length/2),
+                                  ref_length == 2 ~ 99,
+                                  ref_length == 1 | ref_length == 0 ~ 100),
+         bp_add_end = case_when(ref_length > 2 ~ 100-ceiling(ref_length/2),
+                                ref_length == 2 | ref_length == 1 |
+                                  ref_length == 0 ~ 99),
+         start_oligo = bp_start-bp_add_start,
+         end_oligo = bp_end+bp_add_end)
+
+# double check indel oligo lengths
+proxies_indel$oligo_length <- proxies_indel$end_oligo - proxies_indel$start_oligo 
+range(proxies_indel$oligo_length) # should be 199
+
+# get reference seq
+proxies_indel$ref_seq <- as.character(Biostrings::getSeq(BSgenome.Hsapiens.UCSC.hg38,
+                                                     proxies_indel$chr,
+                                                     proxies_indel$start_oligo,
+                                                     proxies_indel$end_oligo))
+range(nchar(proxies_indel$ref_seq)) # should be 200, may need to manually fix any outside of this
+
+proxies_indel_corrected <- cut_correct(proxies_indel, "ref_seq")
+
+proxies_indel_corrected$alt_seq <- proxies_indel_corrected$corrected_seq
+
+# make alt seq
+proxies_indel_corrected <- proxies_indel_corrected %>%
+  mutate(bp_alt_start = case_when(ref_length == 0 ~ 101,
+                                  ref_length == 1 ~ 100,
+                                  ref_length == 2 ~ 99,
+                                  ref_length > 2 ~ bp_add_start),
+         bp_alt_end = case_when(ref_length > 2 ~ bp_add_start+nchar(ref_allele)+1,
+                                ref_length == 2 | ref_length == 1 | ref_length == 0 ~ 102))
+
+proxies_indel_corrected <- proxies_indel_corrected %>%
+  mutate(alt_seq = paste0(str_sub(corrected_seq, 1, bp_alt_start), alt_allele, str_sub(corrected_seq, bp_alt_end, 200)))
+
+# prep metadata so you can make the full oligo names
+proxies_indel_corrected <- proxies_indel_corrected %>%
+  mutate(base_name = paste(rsid, chr, bp, ref_allele_name, alt_allele_name, sep = "_"),
+         ref_name = paste(base_name, "R", sep = "_"),
+         alt_name = paste(base_name, "A", sep = "_"))
+
+# check allele concordance to make sure nothing got thrown off of the coordinates
+proxies_indel_corrected <- proxies_indel_corrected %>%
+  mutate(pull_allele = case_when(ref_length == 0 ~ "",
+                                 ref_length == 1 ~ str_sub(corrected_seq, 101, 101),
+                                 ref_length == 2 ~ str_sub(corrected_seq, 100, 101),
+                                 ref_length > 2 ~ str_sub(corrected_seq, bp_alt_start+1, bp_alt_end-1)),
+         allele_check = case_when(pull_allele == ref_allele ~ TRUE,
+                                  TRUE ~ FALSE))
+table(proxies_indel_corrected$allele_check) # hopefully all TRUE - if not, inspect manually
+```
+
+Save full table with oligo annotations, then make final table of oligos with adapters and FASTQ file for alignments. Change five_adapter and three_adapter variables to the cloning adapter sequences.
+
+```{r}
+oligo_info <- bind_rows(proxies_snv_corrected[,c(1:33)], proxies_indel_corrected[,c(1:9, 15, 16, 18, 21:38, 41:43)]) %>%
+  rename(original_ref_seq = ref_seq, corrected_ref_seq = corrected_seq)
+  
+write.table(oligo_info, "/path/to/oligo_info.tsv", sep = "\t", quote = F, row.names = F)
+
+five_adapter <- ""
+three_adapter <- ""
+
+oligo_tab <- data.frame(
+  oligo_name = c(oligo_info$ref_name, oligo_info$alt_name),
+  oligo_seq = c(oligo_info$corrected_ref_seq, oligo_info$alt_seq)
+)
+
+# 
+oligo_tab$full_oligo_seq <- paste0(five_adapter, oligo_tab$oligo_seq, three_adapter)
+write.table(oligo_tab[,c()], "/path/to/out_tab.tsv", sep = "\t", quote = F, row.names = F)
+
+oligo_seq = as.list(oligo_tab$oligo_seq)
+oligo_name = oligo_tab$oligo_name
+write.fasta(oligo_seq, oligo_name, "/path/to/out_ref.fasta",
+            open = "w", as.string = FALSE)
+
+```
