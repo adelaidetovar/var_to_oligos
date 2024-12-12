@@ -1,5 +1,7 @@
 options(repos = c(CRAN = "https://cloud.r-project.org"))
-install.packages("librarian")
+if (!requireNamespace("librarian", quietly = TRUE)) {
+	install.packages("librarian")
+}
 
 librarian::shelf(tidyverse, LDlinkR, argparse)
 
