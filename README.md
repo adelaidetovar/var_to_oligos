@@ -2,9 +2,11 @@
 
 This repo contains R scripts to make MPRA oligos from GWAS variants. It assumes that you're starting from a list of signals and corresponding ancestries in which those signals were identified and want to perform LD expansion to generate a full list of variants. If you have already obtained your full list of variants, you can make adjustments to the `grab_info.R` script to accommodate different formatting.
 
-## To start
+## To start and note on use
 
 `git clone https://github.com/adelaidetovar/var_to_oligos.git`
+
+If you don't already have a working tidyverse install in R, check to make sure that you've removed any reference to anaconda, miniconda, etc. in your `PATH` variable prior to running this code. Otherwise, it'll think you don't have the right C/C++ libraries installed.
 
 ## Perform LD expansion
 
