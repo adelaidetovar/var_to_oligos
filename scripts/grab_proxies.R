@@ -57,9 +57,9 @@ if(any(signals$ancestry %in% c("eastasian", "east_asian", "eas", "multi", "te", 
 }
 
 # prep for EUR
-if(any(signals$ancestry %in% c("european", "eas", "multi", "te", "ta"))) {
+if(any(signals$ancestry %in% c("european", "eur", "multi", "te", "ta"))) {
 	ldlink_EUR <- signals %>%
-		filter(signals$ancestry %in% c("european", "eas", "multi", "te", "ta")) %>%
+		filter(signals$ancestry %in% c("european", "eur", "multi", "te", "ta")) %>%
 		unique()
 }
 
