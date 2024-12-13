@@ -1,3 +1,7 @@
+options(repos = c(CRAN = "https://cloud.r-project.org"))
+if (!requireNamespace("rsnps", quietly = TRUE)) {
+	remotes::install_github("ropensci/rsnps")
+}
 librarian::shelf(tidyverse, argparse, rsnps, purrr, httr)
 
 parser <- ArgumentParser()
