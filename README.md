@@ -17,12 +17,14 @@ If you don't already have a working tidyverse install in R, check to make sure t
 
 ## Grab variants (optional) and variant info
 
+Set up a new directory in your workspace (e.g., `scratch`). Deposit your starting list (GWAS signals, coordinates, or variants) in this directory.
+
 The `get_var_and_info.R` script is meant to be run from the command line wrapped with `sbatch` or in a job submission script. Run `/path/to/get_var_and_info.R -h` to see all inputs or look at the example job submission scripts in the examples directory to see how to format submissions for your preferred mode.
 
 ## Example one-liner to get variants and info for GWAS signals
 
 ```
-sbatch --account=[acct] --ntasks=1 --mem-per-cpu=10G --time=01:00:00 --wrap "Rscript /path/to/get_var_and_info.R -intab /path/to/working_dir/signal_list.txt -ldlinktoken [ldlinktoken] -ncbikey [ncbikey] -outdir var_out_gwas`
+sbatch --account=[acct] --ntasks=1 --mem-per-cpu=10G --time=01:00:00 --wrap "Rscript /path/to/get_var_and_info.R -intab signal_list.txt -ldlinktoken [ldlinktoken] -ncbikey [ncbikey] -outdir var_out_gwas`
 
 Your input signal list (here, `signal_list.txt`) should have two columns: `signal_index_rsid` and `ancestry`, where `ancestry` corresponds to one of the 1000 Genomes superpopulation IDs (AFR, AMR, EAS, EUR, SAS) or from a trans-ethnic/-ancestry analysis (TE/TA). This script will need to be modified if you want to use one of the subpopulations.
 
