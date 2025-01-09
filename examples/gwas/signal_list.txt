@@ -1,0 +1,4 @@
+signal_index_rsid	ancestry
+rs2234962	EUR
+rs2644262	EUR
+rs78310129	EUR

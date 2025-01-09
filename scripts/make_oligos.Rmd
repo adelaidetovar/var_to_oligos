@@ -107,10 +107,10 @@ cut_correct <- function(df, ref_seq_col) {
 
 ```
 
-Make final edits to proxy list formatting. (using output from `grab_info.R`)
+Make final edits to proxy list formatting. (using output from `get_var_and_info.R`)
 
 ```{r}
-proxies_final <- read.delim("/path/to/proxies_info.tsv")
+proxies_final <- read.delim("/path/to/var_info.tsv")
 
 proxies_final <- proxies_final %>%
   mutate(chr = case_when(substr(chr,1,3)=="chr" ~ chr,
