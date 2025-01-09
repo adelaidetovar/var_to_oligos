@@ -25,6 +25,7 @@ The `get_var_and_info.R` script is meant to be run from the command line wrapped
 
 ```
 sbatch --account=[acct] --ntasks=1 --mem-per-cpu=10G --time=01:00:00 --wrap "Rscript /path/to/get_var_and_info.R -intab signal_list.txt -ldlinktoken [ldlinktoken] -ncbikey [ncbikey] -outdir var_out_gwas`
+```
 
 Your input signal list (here, `signal_list.txt`) should have two columns: `signal_index_rsid` and `ancestry`, where `ancestry` corresponds to one of the 1000 Genomes superpopulation IDs (AFR, AMR, EAS, EUR, SAS) or from a trans-ethnic/-ancestry analysis (TE/TA). This script will need to be modified if you want to use one of the subpopulations.
 
