@@ -17,13 +17,14 @@ If you don't already have a working tidyverse install in R, check to make sure t
 
 ## Grab variants (optional) and variant info
 
-The `grab_proxies.R` script is meant to be run from the command line wrapped with `sbatch` or in a job submission script. Your input signal list should have two columns: `signal_index_rsid` and `ancestry`, where `ancestry` corresponds to one of the 1000 Genomes superpopulation IDs (AFR, AMR, EAS, EUR, SAS) or from a trans-ethnic/-ancestry analysis (TE/TA). This script will need to be modified if you want to use one of the subpopulations.
+The `get_var_and_info.R` script is meant to be run from the command line wrapped with `sbatch` or in a job submission script. Run `/path/to/get_var_and_info.R -h` to see all inputs or look at the example job submission scripts in the examples directory to see how to format submissions for your preferred mode.
 
-For example:
+## Example one-liner to get variants and info for GWAS signals
 
 ```
-sbatch --account=[acct] --ntasks=1 --mem-per-cpu=4GB --time=00:10:00 --wrap "Rscript /path/to/grab_proxies.R -intab /path/to/signal_list.txt -token [ldlink_token] -genomebuild [select one: grch37, grch38, grch38_high_coverage (default)] -outdir /path/to/snp_outdir"
-```
+sbatch --account=[acct] --ntasks=1 --mem-per-cpu=10G --time=01:00:00 --wrap "Rscript /path/to/get_var_and_info.R -intab /path/to/working_dir/signal_list.txt -ldlinktoken [ldlinktoken] -ncbikey [ncbikey] -outdir var_out_gwas`
+
+Your input signal list (here, `signal_list.txt`) should have two columns: `signal_index_rsid` and `ancestry`, where `ancestry` corresponds to one of the 1000 Genomes superpopulation IDs (AFR, AMR, EAS, EUR, SAS) or from a trans-ethnic/-ancestry analysis (TE/TA). This script will need to be modified if you want to use one of the subpopulations.
 
 Adjust paths and parameters (in square brackets) as needed. 
 
